@@ -1,2 +1,4 @@
 Flask==1.1.2
 py2neo==4.3.0
+nltk==3.5
+Flask-Cors==3.0.8
