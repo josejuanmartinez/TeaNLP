@@ -28,9 +28,9 @@ IS_PUNCT = "IS_PUNCT"
 IS_STOP = "IS_STOP"
 IS_NUM = "IS_NUM"
 IS_ALPHA = "IS_ALPHA"
-HYPERNYMS = "HYPERNYMS"
-SYNONYMS = "SYNONYMS"
-ANTONYMS = "ANTONYMS"
+HYPERNYM = "HYPERNYM"
+SYNONYM = "SYNONYM"
+ANTONYM = "ANTONYM"
 
 
 def check_prerequisites():
@@ -112,19 +112,19 @@ def preprocess():
         if not features[IS_STOP] and not features[IS_NUM] and not features[IS_PUNCT]:
             for syn in wordnet.synsets(token, pos=wordnet_pos):
                 for l in syn.lemmas():
-                    synonym = l.name().replace("_", " ").lower()
+                    synonym = l.name().replace("_", " ").replace("-", " ").lower()
                     if synonym != token.lower():
                         synonyms.add(synonym)
                     if l.antonyms():
-                        antonyms.add(l.antonyms()[0].name().replace("_", " ").lower())
+                        antonyms.add(l.antonyms()[0].name().replace("_", " ").replace("-", " ").lower())
 
                 for hypernym in syn.hypernyms():
                     for lemma in hypernym.lemmas():
-                        hypernyms.add(lemma.name().replace("_", " ").lower())
+                        hypernyms.add(lemma.name().replace("_", " ").replace("-", " ").lower())
 
-        features[HYPERNYMS] = list(hypernyms)
-        features[SYNONYMS] = list(synonyms)
-        features[ANTONYMS] = list(antonyms)
+        features[HYPERNYM] = list(hypernyms)
+        features[SYNONYM] = list(synonyms)
+        features[ANTONYM] = list(antonyms)
 
         preprocessed_tokens.append(features)
 
