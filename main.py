@@ -5,38 +5,18 @@ from flask import request
 from flask_cors import CORS
 
 import nltk
-from nltk.corpus import stopwords
 from nltk.tokenize.punkt import PunktToken
-from nltk import TweetTokenizer
-from nltk.stem import WordNetLemmatizer, SnowballStemmer
 from nltk.corpus import wordnet
 
 from py2neo import Graph
 
-import torch
-from transformers import *
+from MLUtils import MLUtils
+from NLPUtils import NLPUtils
+from config import *
 
 app = Flask(__name__)
 CORS(app)
 graph = Graph("bolt://localhost:7687", auth=("TeaNLP", "teanlp"))
-
-NEWLINE = '_NEWLINE_'
-
-ORDER = "ORDER"
-SENTENCE = "SENTENCE"
-ORDER_IN_SENTENCE = "ORDER_IN_SENTENCE"
-ORTH = "ORTH"
-LOWER = "LOWER"
-POS = "POS"
-LEMMA = "LEMMA"
-STEM = "STEM"
-IS_PUNCT = "IS_PUNCT"
-IS_STOP = "IS_STOP"
-IS_NUM = "IS_NUM"
-IS_ALPHA = "IS_ALPHA"
-HYPERNYM = "HYPERNYM"
-SYNONYM = "SYNONYM"
-ANTONYM = "ANTONYM"
 
 
 def check_prerequisites():
@@ -61,12 +41,6 @@ def check_prerequisites():
         nltk.download('wordnet')
 
 
-def tokenize(text):
-    pretrained_weights = 'bert-base-uncased'
-    tokenizer = BertTokenizer.from_pretrained(pretrained_weights)
-    return tokenizer.tokenize(text)
-
-
 @app.route("/")
 def hello():
     graph.run("Match () Return 1 Limit 1")
@@ -81,15 +55,11 @@ def preprocess():
         request_json = json.loads(request.json, strict=False)
         if 'text' in request_json:
 
-            lemmatizer = WordNetLemmatizer()
-            stemmer = SnowballStemmer("english")
-            stop_words = set(stopwords.words('english'))
-
             text = request_json['text'].replace("\n", " " + NEWLINE + " ")
-            sent_detector = nltk.data.load('tokenizers/punkt/english.pickle')
-            sentences = sent_detector.tokenize(text.strip())
-            for s, sentence in enumerate(sentences):
-                tokens = tokenize(sentence)
+
+            tokenizer = None
+            for s, sentence in enumerate(NLPUtils.sentencize(text)):
+                tokens, tokenizer = NLPUtils.tokenize(sentence, tokenizer)
                 pos = nltk.pos_tag(tokens)
                 for t, token in enumerate(tokens):
                     if token == NEWLINE:
@@ -104,9 +74,9 @@ def preprocess():
                     features[ORTH] = token
                     features[LOWER] = token.lower()
                     features[POS] = pos[t][1]
-                    features[LEMMA] = lemmatizer.lemmatize(token)
-                    features[STEM] = stemmer.stem(token)
-                    features[IS_STOP] = token in stop_words
+                    features[LEMMA] = NLPUtils.lemmatize(token)
+                    features[STEM] = NLPUtils.stemize(token)
+                    features[IS_STOP] = NLPUtils.is_stop_word(token)
                     features[IS_ALPHA] = tok.is_alpha is not None
                     features[IS_NUM] = tok.is_number
                     features[IS_PUNCT] = not tok.is_non_punct
@@ -125,7 +95,7 @@ def preprocess():
                     elif features[POS].startswith('RB'):
                         wordnet_pos = 'r'
 
-                    if not features[IS_STOP] and not features[IS_NUM] and not features[IS_PUNCT]:
+                    if not features[IS_STOP]:
                         for syn in wordnet.synsets(token, pos=wordnet_pos):
                             for l in syn.lemmas():
                                 synonym = l.name().replace("_", " ").replace("-", " ").lower()
@@ -147,48 +117,16 @@ def preprocess():
     print(preprocessed_tokens)
     return {'result': preprocessed_tokens}
 
+# 1) Receive the token from FRONT  -> features, BERT embedding
+# 2) Receive the sentence from front -> BERT sentence embedding
+# 3) Receive the text from front -> BoW, mean value of embeddings of the BoW
 
 def save():
-    text = "Hi, my name is Raul, I'm from Spain"
-
-    lemmatizer = WordNetLemmatizer()
-
-    lemmas = []
-
-    sent_detector = nltk.data.load('tokenizers/punkt/english.pickle')
-    sentences = sent_detector.tokenize(text.strip())
-    for s, sentence in enumerate(sentences):
-        toks = TweetTokenizer().tokenize(sentence)
-        for t, tok in enumerate(toks):
-            if tok == NEWLINE:
-                tok = '\n'
-
-            lemma = lemmatizer.lemmatize(tok)
-            lemmas.append(lemma)
-
-    pretrained_weights = 'bert-base-uncased'
-    tokenizer = BertTokenizer.from_pretrained(pretrained_weights)
-    model = BertModel.from_pretrained(pretrained_weights)
-
-    input_ids = torch.tensor(tokenizer.encode(' '.join(lemmas), add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-    outputs = model(input_ids)
-    print(outputs[0]) # hidden_layer, PyTorch tensor of (1, N, 768), where N is num of tokens
-    print(outputs[0].shape)
-    print(outputs[0][0][13])
-    print(len(lemmas))
-    """
-    check_prerequisites()
-    spark = sparknlp.start()
-
-    if request is not None and request.json is not None:
-        request_json = json.loads(request.json, strict=False)
-        if 'graph' in request_json and 'text' in request_json['graph'] and 'ORTH' in request_json['graph']:
-
-            # Lemmas
-            lemmatizer.lemmatize(token)
-
- 
-    """
+    text = "Hi, my name is Raul, I'm from Spain. I would like to know how are you. Or not..."
+    we, se, te = MLUtils.get_embeddings(text, tok_num=4)
+    print(we.shape)
+    print(se.shape)
+    print(te.shape)
 
 if __name__ == "__main__":
     save()
