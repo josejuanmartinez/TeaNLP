@@ -10,7 +10,7 @@ from config import NEWLINE
 class MLUtils:
 
     @staticmethod
-    def calculate_mean_embeddings(we):
+    def get_BERT_text_embeddings(we):
         # we = PyTorch tensor of (1, N, 768), where N is num of tokens
         # we[0].shape[2] = 768 for BERT
 
@@ -27,7 +27,7 @@ class MLUtils:
         return mean
 
     @staticmethod
-    def get_BERT_word_embeddings(text, only_lemmas=False):
+    def get_BERT_word_embeddings(text, only_lemmas=False, no_stop=False):
         pretrained_weights = 'bert-base-uncased'
         tokenizer = BertTokenizer.from_pretrained(pretrained_weights)
         model = BertModel.from_pretrained(pretrained_weights)
@@ -39,6 +39,9 @@ class MLUtils:
             for t, tok in enumerate(toks):
                 if tok == NEWLINE:
                     tok = '\n'
+
+                if no_stop and NLPUtils.is_stop_word(tok):
+                    continue
 
                 if only_lemmas:
                     input.append(NLPUtils.lemmatize(tok))
@@ -72,18 +75,21 @@ class MLUtils:
         return ndim_tensor
 
     @staticmethod
-    def get_embeddings(text, tok_num):
+    def get_embeddings(text, sentence_num, tok_num):
 
         # Word Embeddings
         # hidden_layer, we is a PyTorch tensor of (1, N, 768), where N is num of tokens
         # [0] because is last layer
         we = MLUtils.get_BERT_word_embeddings(text)[0]
-        #print("Word embeddings tensors:")
-        # print(we)
-        # print(we.shape)
+        """print("Word embeddings tensors:")
+        print(we)
+        print(we.shape)
+        print(we_lemmas)
+        print(we_lemmas.shape)
+        """
 
         if tok_num >= we.shape[1]:
-            print ("Parameter 'tok_num' bigger than number of tokens. Returning None")
+            print("Parameter 'tok_num' bigger than number of tokens. Returning None")
             we = None
 
         # Sentence Embeddings
@@ -92,7 +98,8 @@ class MLUtils:
         # print(se)
 
         # Text embeddings: Mean of the word embeddings.
-        te = MLUtils.calculate_mean_embeddings(we)
+        we_lemmas = MLUtils.get_BERT_word_embeddings(text, only_lemmas=True, no_stop=True)[0]
+        te = MLUtils.get_BERT_text_embeddings(we_lemmas)
         # print("Text embeddings tensors:")
         # print(te)
         # print(te.shape)

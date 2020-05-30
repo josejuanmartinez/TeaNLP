@@ -1,5 +1,9 @@
+import base64
+import io
 import json
+import pickle
 
+import torch
 from flask import Flask
 from flask import request
 from flask_cors import CORS
@@ -113,20 +117,47 @@ def preprocess():
                     features[ANTONYM] = list(antonyms)
 
                     preprocessed_tokens.append(features)
+    else:
+        return 'Bad request.', 400
 
     print(preprocessed_tokens)
     return {'result': preprocessed_tokens}
 
-# 1) Receive the token from FRONT  -> features, BERT embedding
-# 2) Receive the sentence from front -> BERT sentence embedding
-# 3) Receive the text from front -> BoW, mean value of embeddings of the BoW
 
+@app.route("/save", methods=['POST'])
 def save():
-    text = "Hi, my name is Raul, I'm from Spain. I would like to know how are you. Or not..."
-    we, se, te = MLUtils.get_embeddings(text, tok_num=4)
-    print(we.shape)
-    print(se.shape)
-    print(te.shape)
+    check_prerequisites()
+    if request is not None and request.json is not None:
+        request_json = json.loads(request.json, strict=False)
+        if 'text' in request_json:
+            text = request_json['text'].replace("\n", " " + NEWLINE + " ")
+        else:
+            return "'text' not present in POST request", 400
+        if 'token' in request_json:
+            token = request_json['token']
 
-if __name__ == "__main__":
-    save()
+            tok_order = int(token[ORDER])
+            tok_sentence = int(token[SENTENCE])
+        else:
+            return "'tok_feat' not present in POST request", 400
+    else:
+        return 'Bad request.', 400
+
+    we, se, te = MLUtils.get_embeddings(text, sentence_num=tok_sentence, tok_num=tok_order)
+
+    bio = io.BytesIO()
+    torch.save(we, bio)
+    print(base64.b64encode(bio.getvalue()))
+    bio.close()
+
+    bio = io.BytesIO()
+    torch.save(se, bio)
+    print(base64.b64encode(bio.getvalue()))
+    bio.close()
+
+    bio = io.BytesIO()
+    torch.save(te, bio)
+    print(base64.b64encode(bio.getvalue()))
+    bio.close()
+
+    return {'acknowledged': True}
