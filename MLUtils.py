@@ -1,21 +1,82 @@
 import numpy as np
 import torch
 from sentence_transformers import SentenceTransformer
-from transformers import BertModel, BertTokenizer
+from transformers import AutoTokenizer, AutoModelWithLMHead
 
 from NLPUtils import NLPUtils
 from config import NEWLINE
 
 
 class MLUtils:
+    EMBEDDINGS_NAME = 'distilbert-base-cased'
+    SENTENCE_EMBEDDINGS_NAME = 'bert-base-nli-mean-tokens'
+    SUBWORD_MARK = '##'
+
+    instance = None
+
+    class __MLUtils:
+        def __init__(self):
+            # This forces download if not done
+            self.tokenizer = AutoTokenizer.from_pretrained(MLUtils.EMBEDDINGS_NAME)
+            self.model = AutoModelWithLMHead.from_pretrained(MLUtils.EMBEDDINGS_NAME)
+            self.sentence_model = SentenceTransformer(MLUtils.SENTENCE_EMBEDDINGS_NAME)
+
+    def __init__(self):
+        if not MLUtils.instance:
+            MLUtils.instance = MLUtils.__MLUtils()
+
+    def __getattr__(self, name):
+        return getattr(self.instance, name)
 
     @staticmethod
-    def get_BERT_text_embeddings(we):
+    def subword_tokenize(text):
+        original_tokens = MLUtils.instance.tokenizer.tokenize(text)
+        lower_tokens = MLUtils.instance.tokenizer.tokenize(text.lower())
+        merged_original_tokens = []
+        merged_lower_tokens = []
+
+        last_tok = 0
+        for i, tok in enumerate(lower_tokens):
+            if MLUtils.SUBWORD_MARK in tok and last_tok > 0 and 'text' in merged_lower_tokens[last_tok-1] and 'num' in \
+                    merged_lower_tokens[last_tok - 1]:
+                merged_lower_tokens[last_tok - 1]['text'] += tok
+                merged_lower_tokens[last_tok - 1]['num'].append(i)
+            else:
+                merged_lower_tokens.append({'text': tok, 'num': [i]})
+                last_tok += 1
+
+        last_tok = 0
+        for i, tok in enumerate(original_tokens):
+            if MLUtils.SUBWORD_MARK in tok and last_tok > 0 and 'text' in merged_original_tokens[last_tok - 1] \
+                    and 'num' in merged_original_tokens[last_tok - 1]:
+                merged_original_tokens[last_tok - 1]['text'] += tok
+                merged_original_tokens[last_tok - 1]['num'].append(i)
+            else:
+                merged_original_tokens.append({'text': tok, 'num': [i]})
+                last_tok += 1
+
+        return merged_original_tokens, merged_lower_tokens, NLPUtils.truecase(merged_original_tokens,
+                                                                              merged_lower_tokens)
+
+    @staticmethod
+    def tokenize(text):
+        return MLUtils.instance.tokenizer.tokenize(text)
+
+    @staticmethod
+    def subwords_to_words(merged_tokens):
+        return [x['text'].replace(MLUtils.SUBWORD_MARK, '') for x in merged_tokens]
+
+    @staticmethod
+    def get_bert_text_embeddings(text):
         # we = PyTorch tensor of (1, N, 768), where N is num of tokens
         # we[0].shape[2] = 768 for BERT
 
+        we = MLUtils.get_bert_word_embeddings(text)
+        print(we.shape)
         embeddings_dim = we.shape[2]
+        print("Dim: {}".format(embeddings_dim))
         tok_num = we.shape[1]
+        print("Tokens: {}".format(tok_num))
 
         tensor_acc = torch.tensor(np.zeros(embeddings_dim))
 
@@ -27,81 +88,74 @@ class MLUtils:
         return mean
 
     @staticmethod
-    def get_BERT_word_embeddings(text, only_lemmas=False, no_stop=False):
-        pretrained_weights = 'bert-base-uncased'
-        tokenizer = BertTokenizer.from_pretrained(pretrained_weights)
-        model = BertModel.from_pretrained(pretrained_weights)
+    def get_bert_word_embeddings(sentence):
 
-        input = []
+        embeddings = torch.tensor(MLUtils.instance.tokenizer.encode(sentence, add_special_tokens=False)).\
+            unsqueeze(0)
 
-        for s, sentence in enumerate(NLPUtils.sentencize(text.strip())):
-            toks, tokenizer = NLPUtils.tokenize(sentence, tokenizer)
-            for t, tok in enumerate(toks):
-                if tok == NEWLINE:
-                    tok = '\n'
-
-                if no_stop and NLPUtils.is_stop_word(tok):
-                    continue
-
-                if only_lemmas:
-                    input.append(NLPUtils.lemmatize(tok))
-                else:
-                    input.append(tok)
-
-        lemma_embeddings = torch.tensor(tokenizer.encode(' '.join(input), add_special_tokens=True)).unsqueeze(
-            0)
-
-        return model(lemma_embeddings)
+        return MLUtils.instance.model(embeddings)[0]
 
     @staticmethod
-    def get_BERT_sentence_embeddings(text):
-        pretrained_weights = 'bert-base-nli-mean-tokens'
-        sentence_model = SentenceTransformer(pretrained_weights)
-        sentences = []
-        for sentence in NLPUtils.sentencize(text):
-            sentences.append(sentence)
-
+    def get_bert_sentence_embeddings(sentence):
         # This returns an array of tensors
-        sentence_embeddings_numpy = sentence_model.encode(sentences)
-        sentence_embeddings_tensors = []
-        for sen in sentence_embeddings_numpy:
-            sentence_embeddings_tensors.append(torch.tensor(sen))
+        sentence_embeddings_numpy = MLUtils.instance.sentence_model.encode(sentence)
+        return torch.tensor(sentence_embeddings_numpy)
 
-        # I want a tensor instead
-        ndim_tensor = torch.stack(sentence_embeddings_tensors)
-        # print("Converting from array of numpy to stacked tensor")
-        # print(ndim_tensor.shape)
-
-        return ndim_tensor
-
-    @staticmethod
-    def get_embeddings(text, sentence_num, tok_num):
+    """
+    def get_embeddings(self, text, original_toks, lower_toks, original_tok_num, lower_tok_num):
 
         # Word Embeddings
         # hidden_layer, we is a PyTorch tensor of (1, N, 768), where N is num of tokens
         # [0] because is last layer
-        we = MLUtils.get_BERT_word_embeddings(text)[0]
-        """print("Word embeddings tensors:")
-        print(we)
-        print(we.shape)
-        print(we_lemmas)
-        print(we_lemmas.shape)
-        """
+        we_lower = self.get_bert_word_embeddings(lower_toks)[0]
+        we_lower_lemmas = self.get_bert_word_embeddings(lower_toks, lemmatize=True)[0]
+        we_original = self.get_bert_word_embeddings(original_toks)[0]
 
-        if tok_num >= we.shape[1]:
+        if original_tok_num >= we_original.shape[1]:
             print("Parameter 'tok_num' bigger than number of tokens. Returning None")
-            we = None
+            we_original = None
+
+        if lower_tok_num >= we_lower.shape[1]:
+            print("Parameter 'tok_num' bigger than number of tokens. Returning None")
+            we_lower = None
+
+        if lower_tok_num >= we_lower_lemmas.shape[1]:
+            print("Parameter 'tok_num' bigger than number of tokens. Returning None")
+            we_lower_lemmas = None
 
         # Sentence Embeddings
-        se = MLUtils.get_BERT_sentence_embeddings(text)
+        se = self.get_bert_sentence_embeddings(text)
         # print("Sentence embeddings tensors:")
         # print(se)
 
         # Text embeddings: Mean of the word embeddings.
-        we_lemmas = MLUtils.get_BERT_word_embeddings(text, only_lemmas=True, no_stop=True)[0]
-        te = MLUtils.get_BERT_text_embeddings(we_lemmas)
+        we_lemmas = self.get_bert_word_embeddings(text, lemmatize=True)[0]
+        te = MLUtils.get_bert_text_embeddings(we_lemmas)
         # print("Text embeddings tensors:")
         # print(te)
         # print(te.shape)
 
-        return we[0][tok_num], se, te
+        return we[0][tok_num], se[sentence_num], te"""
+
+    @staticmethod
+    def token_prediction(masked_sentence, original_word):
+
+        input = MLUtils.instance.tokenizer.encode(masked_sentence, return_tensors="pt")
+        mask_token_index = torch.where(input == MLUtils.instance.tokenizer.mask_token_id)[1]
+
+        token_logits = MLUtils.instance.model(input)[0]
+        mask_token_logits = token_logits[0, mask_token_index, :]
+
+        top_5_tokens = torch.topk(mask_token_logits, 5, dim=1).indices[0].tolist()
+
+        decoded_top_5_tokens = [MLUtils.instance.tokenizer.decode([token]) for token in top_5_tokens]
+        result = []
+        for token in decoded_top_5_tokens:
+            if token in set(NLPUtils.instance.english_vocab) and len(token) > 2 and original_word[0].isupper() == \
+                    token[0].isupper():
+                result.append(token)
+
+        return result
+        #for token in top_5_tokens:
+        #    print(masked_sentence.replace(MLUtils.instance.tokenizer.mask_token, MLUtils.instance.tokenizer.decode([token])))
+

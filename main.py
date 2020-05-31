@@ -1,7 +1,7 @@
 import base64
+import copy
 import io
 import json
-import pickle
 
 import torch
 from flask import Flask
@@ -18,31 +18,18 @@ from MLUtils import MLUtils
 from NLPUtils import NLPUtils
 from config import *
 
+import json
+
+from domain.bert_subwords import BertSubwords
+from domain.offset import Offset
+from domain.token import Token
+
 app = Flask(__name__)
 CORS(app)
 graph = Graph("bolt://localhost:7687", auth=("TeaNLP", "teanlp"))
 
-
-def check_prerequisites():
-    try:
-        nltk.data.find('tokenizers/punkt')
-    except LookupError:
-        nltk.download('punkt')
-
-    try:
-        nltk.data.find('taggers/averaged_perceptron_tagger')
-    except LookupError:
-        nltk.download('averaged_perceptron_tagger')
-
-    try:
-        nltk.data.find('corpora/stopwords')
-    except LookupError:
-        nltk.download('stopwords')
-
-    try:
-        nltk.data.find('corpora/wordnet')
-    except LookupError:
-        nltk.download('wordnet')
+nlputils = NLPUtils()
+mlutils = MLUtils()
 
 
 @app.route("/")
@@ -53,80 +40,91 @@ def hello():
 
 @app.route("/preprocess", methods=['POST'])
 def preprocess():
-    check_prerequisites()
     preprocessed_tokens = []
     if request is not None and request.json is not None:
         request_json = json.loads(request.json, strict=False)
         if 'text' in request_json:
 
             text = request_json['text'].replace("\n", " " + NEWLINE + " ")
+            # print("Text: {}".format(text))
+            text_embeddings = MLUtils.get_bert_text_embeddings(text)
+            # print("Text Embeddings: {}".format(text_embeddings.shape))
 
-            tokenizer = None
+            bio = io.BytesIO()
+            torch.save(text_embeddings, bio)
+            b64_text_embeddings = str(base64.b64encode(bio.getvalue()))
+            # print(b64_text_embeddings)
+            bio.close()
+
+            tok_counter = 0
+            text_tok_counter_original = 0
+            text_tok_counter_lower = 0
+
             for s, sentence in enumerate(NLPUtils.sentencize(text)):
-                tokens, tokenizer = NLPUtils.tokenize(sentence, tokenizer)
-                pos = nltk.pos_tag(tokens)
-                for t, token in enumerate(tokens):
+                # print("Sentence: {}".format(sentence))
+                original_merged_tokens, lower_merged_tokens, truecased_merged_tokens = MLUtils.subword_tokenize(sentence)
+                # print("Original tokens[{}]: {}".format(len(original_merged_tokens), original_merged_tokens))
+                # print("Lower tokens[{}]: {}".format(len(lower_merged_tokens), lower_merged_tokens))
+                original_clean_tokens = MLUtils.subwords_to_words(truecased_merged_tokens)
+                # print("Clean tokens[{}]: {}".format(len(original_clean_tokens), original_clean_tokens))
+
+                sentence_embeddings = MLUtils.get_bert_sentence_embeddings(sentence)
+
+                bio = io.BytesIO()
+                torch.save(sentence_embeddings, bio)
+                b64_sentence_embeddings = str(base64.b64encode(bio.getvalue()))
+                # print(b64_sentence_embeddings)
+                bio.close()
+
+                original_word_embeddings = MLUtils.get_bert_word_embeddings(sentence)[0]
+
+                lower_word_embeddings = MLUtils.get_bert_word_embeddings(sentence.lower())[0]
+
+                pos = nltk.pos_tag(original_clean_tokens)
+                sent_tok_counter = 0
+                sent_tok_counter_original = 0
+                sent_tok_counter_lower = 0
+                for t, token in enumerate(original_clean_tokens):
                     if token == NEWLINE:
                         token = '\n'
 
-                    tok = PunktToken(token)
+                    bio = io.BytesIO()
+                    torch.save(original_word_embeddings[sent_tok_counter_original], bio)
+                    b64_original_word_embeddings = str(base64.b64encode(bio.getvalue()))
+                    bio.close()
 
-                    features = dict()
-                    features[SENTENCE] = str(s)
-                    features[ORDER] = str(s+t)
-                    features[ORDER_IN_SENTENCE] = str(t)
-                    features[ORTH] = token
-                    features[LOWER] = token.lower()
-                    features[POS] = pos[t][1]
-                    features[LEMMA] = NLPUtils.lemmatize(token)
-                    features[STEM] = NLPUtils.stemize(token)
-                    features[IS_STOP] = NLPUtils.is_stop_word(token)
-                    features[IS_ALPHA] = tok.is_alpha is not None
-                    features[IS_NUM] = tok.is_number
-                    features[IS_PUNCT] = not tok.is_non_punct
+                    bio = io.BytesIO()
+                    torch.save(lower_word_embeddings[sent_tok_counter_lower], bio)
+                    b64_lower_word_embeddings = str(base64.b64encode(bio.getvalue()))
+                    bio.close()
 
-                    synonyms = set()
-                    antonyms = set()
-                    hypernyms = set()
-                    wordnet_pos = ''  # n,v,a,r
+                    offset = Offset(s, text_tok_counter_original, tok_counter, text_tok_counter_lower, t)
+                    original_bert_subwords = BertSubwords(original_merged_tokens[sent_tok_counter],
+                                                          b64_original_word_embeddings)
+                    lower_bert_subwords = BertSubwords(lower_merged_tokens[sent_tok_counter],
+                                                       b64_lower_word_embeddings)
 
-                    if features[POS].startswith('JJ'):
-                        wordnet_pos = 'a'
-                    elif features[POS].startswith('NN'):
-                        wordnet_pos = 'n'
-                    elif features[POS].startswith('VB'):
-                        wordnet_pos = 'v'
-                    elif features[POS].startswith('RB'):
-                        wordnet_pos = 'r'
+                    tok = Token(token, pos[t][1], offset, original_bert_subwords, lower_bert_subwords,
+                                b64_sentence_embeddings, b64_text_embeddings, original_clean_tokens)
 
-                    if not features[IS_STOP]:
-                        for syn in wordnet.synsets(token, pos=wordnet_pos):
-                            for l in syn.lemmas():
-                                synonym = l.name().replace("_", " ").replace("-", " ").lower()
-                                if synonym != token.lower():
-                                    synonyms.add(synonym)
-                                if l.antonyms():
-                                    antonyms.add(l.antonyms()[0].name().replace("_", " ").replace("-", " ").lower())
+                    preprocessed_tokens.append(tok)
 
-                            for hypernym in syn.hypernyms():
-                                for lemma in hypernym.lemmas():
-                                    hypernyms.add(lemma.name().replace("_", " ").replace("-", " ").lower())
+                    text_tok_counter_original += original_bert_subwords.length
+                    text_tok_counter_lower += lower_bert_subwords.length
+                    sent_tok_counter_original += original_bert_subwords.length
+                    sent_tok_counter_lower += lower_bert_subwords.length
 
-                    features[HYPERNYM] = list(hypernyms)
-                    features[SYNONYM] = list(synonyms)
-                    features[ANTONYM] = list(antonyms)
-
-                    preprocessed_tokens.append(features)
+                    sent_tok_counter += 1
+                    tok_counter += 1
     else:
         return 'Bad request.', 400
 
     print(preprocessed_tokens)
     return {'result': preprocessed_tokens}
 
-
+"""
 @app.route("/save", methods=['POST'])
 def save():
-    check_prerequisites()
     if request is not None and request.json is not None:
         request_json = json.loads(request.json, strict=False)
         if 'text' in request_json:
@@ -136,14 +134,12 @@ def save():
         if 'token' in request_json:
             token = request_json['token']
 
-            tok_order = int(token[ORDER])
+            tok_order = int(token[BERT_SUBWORDS_ORIGINAL_START])
             tok_sentence = int(token[SENTENCE])
         else:
             return "'tok_feat' not present in POST request", 400
     else:
         return 'Bad request.', 400
-
-    we, se, te = MLUtils.get_embeddings(text, sentence_num=tok_sentence, tok_num=tok_order)
 
     bio = io.BytesIO()
     torch.save(we, bio)
@@ -161,3 +157,4 @@ def save():
     bio.close()
 
     return {'acknowledged': True}
+"""
