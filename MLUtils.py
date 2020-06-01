@@ -151,8 +151,8 @@ class MLUtils:
         decoded_top_5_tokens = [MLUtils.instance.tokenizer.decode([token]) for token in top_5_tokens]
         result = []
         for token in decoded_top_5_tokens:
-            if token in set(NLPUtils.instance.english_vocab) and len(token) > 2 and original_word[0].isupper() == \
-                    token[0].isupper():
+            if token in set(NLPUtils.instance.english_vocab) and len(token) > 2 and not original_word.\
+                linguistic_features.orth[0].isupper() == token[0].isupper():
                 result.append(token)
 
         return result

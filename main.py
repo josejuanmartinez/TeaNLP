@@ -107,7 +107,7 @@ def preprocess():
                     tok = Token(token, pos[t][1], offset, original_bert_subwords, lower_bert_subwords,
                                 b64_sentence_embeddings, b64_text_embeddings, original_clean_tokens)
 
-                    preprocessed_tokens.append(tok)
+                    preprocessed_tokens.append(tok.to_json())
 
                     text_tok_counter_original += original_bert_subwords.length
                     text_tok_counter_lower += lower_bert_subwords.length
@@ -119,8 +119,10 @@ def preprocess():
     else:
         return 'Bad request.', 400
 
-    print(preprocessed_tokens)
-    return {'result': preprocessed_tokens}
+    res_json = json.dumps({'result': preprocessed_tokens}, indent=4)
+    print(res_json)
+
+    return res_json
 
 """
 @app.route("/save", methods=['POST'])

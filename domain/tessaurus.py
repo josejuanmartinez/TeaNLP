@@ -1,33 +1,39 @@
+import json
+
 from NLPUtils import NLPUtils
 
 
 class Tessaurus:
     def __init__(self, orth, pos, is_stop):
         tess = NLPUtils.get_tessaurus(orth, pos, is_stop)
-        self.synonyms = tess[0]
-        self.antonyms = tess[1]
-        self.hypernyms = tess[2]
+        self._synonyms = tess[0]
+        self._antonyms = tess[1]
+        self._hypernyms = tess[2]
+
+    def to_json(self):
+        return {"synonyms": self._synonyms, "antonyms": self._antonyms,
+                     "hypernyms": self._hypernyms}
 
     @property
     def synonyms(self):
-        return self.synonyms
+        return self._synonyms
 
     @synonyms.setter
     def synonyms(self, value):
-        self.synonyms = value
+        self._synonyms = value
 
     @property
     def antonyms(self):
-        return self.antonyms
+        return self._antonyms
 
     @antonyms.setter
     def antonyms(self, value):
-        self.antonyms = value
+        self._antonyms = value
 
     @property
     def hypernyms(self):
-        return self.hypernyms
+        return self._hypernyms
 
     @hypernyms.setter
     def hypernyms(self, value):
-        self.hypernyms = value
+        self._hypernyms = value
