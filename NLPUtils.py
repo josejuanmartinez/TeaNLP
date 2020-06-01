@@ -116,7 +116,7 @@ class NLPUtils:
                     for lemma in hypernym.lemmas():
                         hypernyms.add(lemma.name().replace("_", " ").replace("-", " ").lower())
 
-        return list(hypernyms), list(synonyms), list(antonyms)
+        return list(synonyms), list(antonyms), list(hypernyms)
 
 
     """

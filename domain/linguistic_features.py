@@ -1,4 +1,5 @@
 import json
+import re
 
 from nltk.tokenize.punkt import PunktToken
 
@@ -20,6 +21,7 @@ class LinguisticFeatures:
         self._is_alpha = tok.is_alpha is not None
         self._is_num = tok.is_number
         self._is_punct = not tok.is_non_punct
+        self._is_space = re.match(r'^[\s\\n\\r\\t ]+$', self._orth) is not None
         self._tessaurus = Tessaurus(self.orth, self.pos, self.is_stop)
         self._meaningful_embedding = not self.is_num and not self.is_punct and not self.is_stop
 
@@ -28,8 +30,8 @@ class LinguisticFeatures:
         return {"orth": self._orth, "lower": self._lower, "pos": self._pos,
                 "offset": self._offset.to_json(), "lemma": self._lemma, "stem": self._stem,
                 "is_stop": self._is_stop, "is_alpha": self._is_alpha, "is_num": self._is_num,
-                "is_punct": self._is_punct, "tessaurus": self._tessaurus.to_json(), "meaningful_embedding":
-                    self._meaningful_embedding}
+                "is_punct": self._is_punct, "is_space": self._is_space, "tessaurus": self._tessaurus.to_json(),
+                "meaningful_embedding": self._meaningful_embedding}
 
     @property
     def orth(self):
@@ -110,6 +112,14 @@ class LinguisticFeatures:
     @is_punct.setter
     def is_punct(self, value):
         self._is_punct = value
+
+    @property
+    def is_space(self):
+        return self._is_space
+
+    @is_space.setter
+    def is_space(self, value):
+        self._is_space = value
 
     @property
     def tessaurus(self):

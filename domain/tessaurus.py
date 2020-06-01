@@ -11,8 +11,7 @@ class Tessaurus:
         self._hypernyms = tess[2]
 
     def to_json(self):
-        return {"synonyms": self._synonyms, "antonyms": self._antonyms,
-                     "hypernyms": self._hypernyms}
+        return {"synonyms": self._synonyms, "antonyms": self._antonyms, "hypernyms": self._hypernyms}
 
     @property
     def synonyms(self):
