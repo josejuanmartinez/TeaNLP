@@ -1,3 +1,5 @@
+import copy
+
 import numpy as np
 import torch
 from sentence_transformers import SentenceTransformer
@@ -100,6 +102,24 @@ class MLUtils:
         # This returns an array of tensors
         sentence_embeddings_numpy = MLUtils.instance.sentence_model.encode(sentence)
         return torch.tensor(sentence_embeddings_numpy)
+
+    @staticmethod
+    def predict(token):
+        """
+        Predicts based on the merged word in the original sentence, not in the subword
+        Args:
+            token: Token object using merged original word
+
+        Returns:
+            A list of word predictions (semantic synonyms)
+        """
+        predictions = []
+        if token.linguistic_features.meaningful_embedding:
+            masked_tokens = copy.deepcopy(token.original_sentence_tokens)
+            masked_tokens[token.linguistic_features.offset.order_in_sentence] = MLUtils.instance.tokenizer.mask_token
+            masked_sentence = " ".join(masked_tokens)
+            predictions = MLUtils.token_prediction(masked_sentence, token)
+        return predictions
 
     """
     def get_embeddings(self, text, original_toks, lower_toks, original_tok_num, lower_tok_num):

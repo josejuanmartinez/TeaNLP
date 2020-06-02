@@ -88,15 +88,20 @@ def preprocess():
                     if token == NEWLINE:
                         token = '\n'
 
-                    bio = io.BytesIO()
-                    torch.save(original_word_embeddings[sent_tok_counter_original], bio)
-                    b64_original_word_embeddings = str(base64.b64encode(bio.getvalue()))
-                    bio.close()
+                    b64_original_word_embeddings = ''
+                    b64_lower_word_embeddings = ''
 
-                    bio = io.BytesIO()
-                    torch.save(lower_word_embeddings[sent_tok_counter_lower], bio)
-                    b64_lower_word_embeddings = str(base64.b64encode(bio.getvalue()))
-                    bio.close()
+                    if not NLPUtils.is_space(token) and token.strip() != '' and MLUtils.SUBWORD_MARK not in token:
+
+                        bio = io.BytesIO()
+                        torch.save(original_word_embeddings[sent_tok_counter_original], bio)
+                        b64_original_word_embeddings = str(base64.b64encode(bio.getvalue()))
+                        bio.close()
+
+                        bio = io.BytesIO()
+                        torch.save(lower_word_embeddings[sent_tok_counter_lower], bio)
+                        b64_lower_word_embeddings = str(base64.b64encode(bio.getvalue()))
+                        bio.close()
 
                     offset = Offset(s, text_tok_counter_original, tok_counter, text_tok_counter_lower, t)
                     original_bert_subwords = BertSubwords(original_merged_tokens[sent_tok_counter],

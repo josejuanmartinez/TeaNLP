@@ -1,3 +1,5 @@
+import re
+
 import nltk
 from nltk.corpus import stopwords, words, wordnet
 from nltk.tokenize.punkt import PunktToken
@@ -118,23 +120,6 @@ class NLPUtils:
 
         return list(synonyms), list(antonyms), list(hypernyms)
 
-
-    """
     @staticmethod
-    def get_bow(text, only_lemmas=False):
-        input = []
-
-        tokenizer = None
-        for s, sentence in enumerate(NLPUtils.sentencize(text.strip())):
-            toks, tokenizer = NLPUtils.tokenize(sentence, tokenizer)
-            for t, tok in enumerate(toks):
-                if tok == NEWLINE:
-                    tok = '\n'
-
-                if only_lemmas:
-                    input.append(NLPUtils.lemmatize(tok))
-                else:
-                    input.append(tok)
-
-        return list(filter(lambda x: not NLPUtils.is_stop_word(x), input))
-    """
+    def is_space(word):
+        return re.match(r'^[\s\\n\\r\\t ]+$', word) is not None

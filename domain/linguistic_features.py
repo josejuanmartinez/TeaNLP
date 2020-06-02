@@ -21,7 +21,7 @@ class LinguisticFeatures:
         self._is_alpha = tok.is_alpha is not None
         self._is_num = tok.is_number
         self._is_punct = not tok.is_non_punct
-        self._is_space = re.match(r'^[\s\\n\\r\\t ]+$', self._orth) is not None
+        self._is_space = NLPUtils.is_space(orth)
         self._tessaurus = Tessaurus(self.orth, self.pos, self.is_stop)
         self._meaningful_embedding = not self.is_num and not self.is_punct and not self.is_stop
 
