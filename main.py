@@ -1,7 +1,5 @@
 import base64
-import copy
 import io
-import json
 
 import torch
 from flask import Flask
@@ -9,10 +7,9 @@ from flask import request
 from flask_cors import CORS
 
 import nltk
-from nltk.tokenize.punkt import PunktToken
-from nltk.corpus import wordnet
 
 from py2neo import Graph
+from transformers import AutoModelForTokenClassification, AutoTokenizer, pipeline
 
 from MLUtils import MLUtils
 from NLPUtils import NLPUtils
@@ -61,30 +58,44 @@ def preprocess():
             text_tok_counter_lower = 0
 
             for s, sentence in enumerate(NLPUtils.sentencize(text)):
-                # print("Sentence: {}".format(sentence))
-                original_merged_tokens, lower_merged_tokens, truecased_merged_tokens = MLUtils.subword_tokenize(sentence)
-                # print("Original tokens[{}]: {}".format(len(original_merged_tokens), original_merged_tokens))
-                # print("Lower tokens[{}]: {}".format(len(lower_merged_tokens), lower_merged_tokens))
-                original_clean_tokens = MLUtils.subwords_to_words(truecased_merged_tokens)
-                # print("Clean tokens[{}]: {}".format(len(original_clean_tokens), original_clean_tokens))
 
+                # 1) I tokenize sentence and sentence.lower()
+                original_tokens = MLUtils.tokenize(sentence)
+                # 2) I do statistical NER (BERT)
+                ner = MLUtils.ner(sentence, grouped_entities=False)
+                original_merged_tokens = MLUtils.merge_subwords(original_tokens, ner)
+
+                # 3) I merge subwords (## for BERT)
+                lower_tokens = MLUtils.tokenize(sentence.lower())
+                lower_merged_tokens = MLUtils.merge_subwords(lower_tokens)
+
+                # 3) I truecase the lower subwords so that they keep original capitalization
+                truecased_merged_tokens = NLPUtils.truecase(original_merged_tokens, lower_merged_tokens)
+
+                # 4) I clean the subwords mark (## for BERT).
+                original_words = [x['text'] for x in truecased_merged_tokens]
+                original_clean_words = MLUtils.subwords_to_words(original_words)
+                # original_clean_nums = [x['num'] for x in truecased_merged_tokens]
+                original_clean_ners = [x['ner'] for x in truecased_merged_tokens]
+
+
+                # Sentence Embeddings
                 sentence_embeddings = MLUtils.get_bert_sentence_embeddings(sentence)
 
                 bio = io.BytesIO()
                 torch.save(sentence_embeddings, bio)
                 b64_sentence_embeddings = str(base64.b64encode(bio.getvalue()))
-                # print(b64_sentence_embeddings)
                 bio.close()
 
                 original_word_embeddings = MLUtils.get_bert_word_embeddings(sentence)[0]
 
                 lower_word_embeddings = MLUtils.get_bert_word_embeddings(sentence.lower())[0]
 
-                pos = nltk.pos_tag(original_clean_tokens)
+                pos = nltk.pos_tag(original_clean_words)
                 sent_tok_counter = 0
                 sent_tok_counter_original = 0
                 sent_tok_counter_lower = 0
-                for t, token in enumerate(original_clean_tokens):
+                for t, token in enumerate(original_clean_words):
                     if token == NEWLINE:
                         token = '\n'
 
@@ -105,12 +116,13 @@ def preprocess():
 
                     offset = Offset(s, text_tok_counter_original, tok_counter, text_tok_counter_lower, t)
                     original_bert_subwords = BertSubwords(original_merged_tokens[sent_tok_counter],
-                                                          b64_original_word_embeddings)
+                                                          b64_original_word_embeddings, original_clean_ners[t])
+                    # Lower subwords don't have reliable NER entities
                     lower_bert_subwords = BertSubwords(lower_merged_tokens[sent_tok_counter],
-                                                       b64_lower_word_embeddings)
+                                                       b64_lower_word_embeddings, ner=None)
 
                     tok = Token(token, pos[t][1], offset, original_bert_subwords, lower_bert_subwords,
-                                b64_sentence_embeddings, b64_text_embeddings, original_clean_tokens)
+                                b64_sentence_embeddings, b64_text_embeddings, original_clean_words)
 
                     preprocessed_tokens.append(tok.to_json())
 
@@ -128,40 +140,3 @@ def preprocess():
     print(res_json)
 
     return res_json
-
-"""
-@app.route("/save", methods=['POST'])
-def save():
-    if request is not None and request.json is not None:
-        request_json = json.loads(request.json, strict=False)
-        if 'text' in request_json:
-            text = request_json['text'].replace("\n", " " + NEWLINE + " ")
-        else:
-            return "'text' not present in POST request", 400
-        if 'token' in request_json:
-            token = request_json['token']
-
-            tok_order = int(token[BERT_SUBWORDS_ORIGINAL_START])
-            tok_sentence = int(token[SENTENCE])
-        else:
-            return "'tok_feat' not present in POST request", 400
-    else:
-        return 'Bad request.', 400
-
-    bio = io.BytesIO()
-    torch.save(we, bio)
-    print(base64.b64encode(bio.getvalue()))
-    bio.close()
-
-    bio = io.BytesIO()
-    torch.save(se, bio)
-    print(base64.b64encode(bio.getvalue()))
-    bio.close()
-
-    bio = io.BytesIO()
-    torch.save(te, bio)
-    print(base64.b64encode(bio.getvalue()))
-    bio.close()
-
-    return {'acknowledged': True}
-"""

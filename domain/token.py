@@ -5,14 +5,15 @@ from domain.statistical_features import StatisticalFeatures
 
 
 class Token:
-    def __init__(self, orth, pos, offset, original_subwords, lower_subwords, se, te, original_sentence_tokens):
-        self._original_sentence_tokens = original_sentence_tokens
+    def __init__(self, orth, pos, offset, original_subwords, lower_subwords, se, te, original_clean_words):
+        self._original_sentence_tokens = original_clean_words
         self._linguistic_features = LinguisticFeatures(orth, pos, offset)
         self._statistical_features = StatisticalFeatures(original_subwords, lower_subwords, se, te, self)
 
     def to_json(self, printable_embeddings=True):
         return {"original_sentence_tokens": json.dumps(self._original_sentence_tokens), "linguistic_features":
-            self._linguistic_features.to_json(), "statistical_features": self._statistical_features.to_json(printable_embeddings)}
+            self._linguistic_features.to_json(), "statistical_features": self._statistical_features.to_json(
+            printable_embeddings)}
 
     @property
     def original_sentence_tokens(self):

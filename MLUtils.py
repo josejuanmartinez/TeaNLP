@@ -3,16 +3,17 @@ import copy
 import numpy as np
 import torch
 from sentence_transformers import SentenceTransformer
-from transformers import AutoTokenizer, AutoModelWithLMHead
+from transformers import AutoTokenizer, AutoModelWithLMHead, AutoModelForTokenClassification, pipeline
 
 from NLPUtils import NLPUtils
-from config import NEWLINE
 
 
 class MLUtils:
     EMBEDDINGS_NAME = 'distilbert-base-cased'
+    NER_EMBEDDINGS_NAME = 'dbmdz/bert-large-cased-finetuned-conll03-english'
     SENTENCE_EMBEDDINGS_NAME = 'bert-base-nli-mean-tokens'
     SUBWORD_MARK = '##'
+    NOENT = 'O-NOENT'
 
     instance = None
 
@@ -21,6 +22,7 @@ class MLUtils:
             # This forces download if not done
             self.tokenizer = AutoTokenizer.from_pretrained(MLUtils.EMBEDDINGS_NAME)
             self.model = AutoModelWithLMHead.from_pretrained(MLUtils.EMBEDDINGS_NAME)
+            self.ner = AutoModelForTokenClassification.from_pretrained(MLUtils.NER_EMBEDDINGS_NAME)
             self.sentence_model = SentenceTransformer(MLUtils.SENTENCE_EMBEDDINGS_NAME)
 
     def __init__(self):
@@ -31,34 +33,27 @@ class MLUtils:
         return getattr(self.instance, name)
 
     @staticmethod
-    def subword_tokenize(text):
-        original_tokens = MLUtils.instance.tokenizer.tokenize(text)
-        lower_tokens = MLUtils.instance.tokenizer.tokenize(text.lower())
-        merged_original_tokens = []
-        merged_lower_tokens = []
-
+    def merge_subwords(tokens, ner_tokens=None):
         last_tok = 0
-        for i, tok in enumerate(lower_tokens):
-            if MLUtils.SUBWORD_MARK in tok and last_tok > 0 and 'text' in merged_lower_tokens[last_tok-1] and 'num' in \
-                    merged_lower_tokens[last_tok - 1]:
-                merged_lower_tokens[last_tok - 1]['text'] += tok
-                merged_lower_tokens[last_tok - 1]['num'].append(i)
+        result = []
+        ner_positions = []
+        if ner_tokens is not None and len(ner_tokens) > 0:
+            ner_positions = [x['index']-1 for x in ner_tokens]
+        for i, tok in enumerate(tokens):
+            if MLUtils.SUBWORD_MARK in tok and last_tok > 0 and 'text' in result[last_tok-1] and 'num' in \
+                    result[last_tok - 1]:
+                result[last_tok - 1]['text'] += tok
+                result[last_tok - 1]['num'].append(i)
+                if ner_tokens is not None and i in ner_positions:
+                    result[last_tok - 1]['ner'].append(ner_tokens[ner_positions.index(i)]['entity'])
+                else:
+                    result[last_tok - 1]['ner'].append(MLUtils.NOENT)
             else:
-                merged_lower_tokens.append({'text': tok, 'num': [i]})
+                result.append({'text': tok, 'num': [i], 'ner': [MLUtils.NOENT]})
+                if ner_tokens is not None and i in ner_positions:
+                    result[len(result)-1]['ner'] = [ner_tokens[ner_positions.index(i)]['entity']]
                 last_tok += 1
-
-        last_tok = 0
-        for i, tok in enumerate(original_tokens):
-            if MLUtils.SUBWORD_MARK in tok and last_tok > 0 and 'text' in merged_original_tokens[last_tok - 1] \
-                    and 'num' in merged_original_tokens[last_tok - 1]:
-                merged_original_tokens[last_tok - 1]['text'] += tok
-                merged_original_tokens[last_tok - 1]['num'].append(i)
-            else:
-                merged_original_tokens.append({'text': tok, 'num': [i]})
-                last_tok += 1
-
-        return merged_original_tokens, merged_lower_tokens, NLPUtils.truecase(merged_original_tokens,
-                                                                              merged_lower_tokens)
+        return result
 
     @staticmethod
     def tokenize(text):
@@ -66,7 +61,7 @@ class MLUtils:
 
     @staticmethod
     def subwords_to_words(merged_tokens):
-        return [x['text'].replace(MLUtils.SUBWORD_MARK, '') for x in merged_tokens]
+        return [x.replace(MLUtils.SUBWORD_MARK, '') for x in merged_tokens]
 
     @staticmethod
     def get_bert_text_embeddings(text):
@@ -121,42 +116,6 @@ class MLUtils:
             predictions = MLUtils.token_prediction(masked_sentence, token)
         return predictions
 
-    """
-    def get_embeddings(self, text, original_toks, lower_toks, original_tok_num, lower_tok_num):
-
-        # Word Embeddings
-        # hidden_layer, we is a PyTorch tensor of (1, N, 768), where N is num of tokens
-        # [0] because is last layer
-        we_lower = self.get_bert_word_embeddings(lower_toks)[0]
-        we_lower_lemmas = self.get_bert_word_embeddings(lower_toks, lemmatize=True)[0]
-        we_original = self.get_bert_word_embeddings(original_toks)[0]
-
-        if original_tok_num >= we_original.shape[1]:
-            print("Parameter 'tok_num' bigger than number of tokens. Returning None")
-            we_original = None
-
-        if lower_tok_num >= we_lower.shape[1]:
-            print("Parameter 'tok_num' bigger than number of tokens. Returning None")
-            we_lower = None
-
-        if lower_tok_num >= we_lower_lemmas.shape[1]:
-            print("Parameter 'tok_num' bigger than number of tokens. Returning None")
-            we_lower_lemmas = None
-
-        # Sentence Embeddings
-        se = self.get_bert_sentence_embeddings(text)
-        # print("Sentence embeddings tensors:")
-        # print(se)
-
-        # Text embeddings: Mean of the word embeddings.
-        we_lemmas = self.get_bert_word_embeddings(text, lemmatize=True)[0]
-        te = MLUtils.get_bert_text_embeddings(we_lemmas)
-        # print("Text embeddings tensors:")
-        # print(te)
-        # print(te.shape)
-
-        return we[0][tok_num], se[sentence_num], te"""
-
     @staticmethod
     def token_prediction(masked_sentence, original_word):
 
@@ -179,3 +138,7 @@ class MLUtils:
         #for token in top_5_tokens:
         #    print(masked_sentence.replace(MLUtils.instance.tokenizer.mask_token, MLUtils.instance.tokenizer.decode([token])))
 
+    @staticmethod
+    def ner(text, grouped_entities=False):
+        nlp = pipeline('ner', model=MLUtils.instance.ner, tokenizer=MLUtils.instance.tokenizer, grouped_entities=grouped_entities)
+        return nlp(text)

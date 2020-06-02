@@ -73,19 +73,16 @@ class NLPUtils:
 
     @staticmethod
     def truecase(input_toks, output_toks):
-        # print("Original {}".format(input_toks))
-        # print("Tokenized {}".format(output_toks))
         assert len(input_toks) == len (output_toks)
 
         result = []
         for i in range(0, len(output_toks)):
             if input_toks[i]['text'].isupper():
-                result.append({'text': output_toks[i]['text'].upper(), 'num': output_toks[i]['num']})
+                result.append({'text': output_toks[i]['text'].upper(), 'num': output_toks[i]['num'], 'ner': input_toks[i]['ner']})
             elif input_toks[i]['text'][0].isupper():
-                result.append({'text': output_toks[i]['text'][0].upper() + output_toks[i]['text'][1:], 'num': output_toks[i]['num']})
+                result.append({'text': output_toks[i]['text'][0].upper() + output_toks[i]['text'][1:], 'num': output_toks[i]['num'], 'ner': input_toks[i]['ner']})
             else:
-                result.append({'text': output_toks[i]['text'], 'num': output_toks[i]['num']})
-        # print("Truecased {}".format(result))
+                result.append({'text': output_toks[i]['text'], 'num': output_toks[i]['num'], 'ner': input_toks[i]['ner']})
         return result
 
     @staticmethod
