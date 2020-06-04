@@ -8,11 +8,9 @@ from flask_cors import CORS
 
 import nltk
 
-from py2neo import Graph
-from transformers import AutoModelForTokenClassification, AutoTokenizer, pipeline
-
 from MLUtils import MLUtils
 from NLPUtils import NLPUtils
+from Neo4JUtils import Neo4JUtils
 from config import *
 
 import json
@@ -23,16 +21,14 @@ from domain.token import Token
 
 app = Flask(__name__)
 CORS(app)
-graph = Graph("bolt://localhost:7687", auth=("TeaNLP", "teanlp"))
 
 nlputils = NLPUtils()
 mlutils = MLUtils()
+neo4jutils = Neo4JUtils()
 
-
-@app.route("/")
+@app.route("/neo4j-health")
 def hello():
-    graph.run("Match () Return 1 Limit 1")
-    return 'Hello, Amparo!'
+    return Neo4JUtils.health()
 
 
 @app.route("/preprocess", methods=['POST'])
@@ -140,3 +136,15 @@ def preprocess():
     print(res_json)
 
     return res_json
+
+
+@app.route("/save", methods=['POST'])
+def save():
+    if request is not None and request.json is not None:
+        request_json = json.loads(request.json, strict=False)
+        if 'token' in request_json:
+            token = request_json['token']
+            print(token)
+            return json.dumps({'result': 'acknowledge'})
+    return json.dumps({'result': 'error'})
+

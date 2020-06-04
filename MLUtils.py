@@ -5,8 +5,6 @@ import torch
 from sentence_transformers import SentenceTransformer
 from transformers import AutoTokenizer, AutoModelWithLMHead, AutoModelForTokenClassification, pipeline
 
-from NLPUtils import NLPUtils
-
 
 class MLUtils:
     EMBEDDINGS_NAME = 'distilbert-base-cased'
