@@ -11,7 +11,7 @@ class Token:
         self._statistical_features = StatisticalFeatures(original_subwords, lower_subwords, se, te, self)
 
     def to_json(self, printable_embeddings=True):
-        return {"original_sentence_tokens": json.dumps(self._original_sentence_tokens), "linguistic_features":
+        return {"original_sentence_tokens": self._original_sentence_tokens, "linguistic_features":
             self._linguistic_features.to_json(), "statistical_features": self._statistical_features.to_json(
             printable_embeddings)}
 
