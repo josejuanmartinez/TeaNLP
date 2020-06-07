@@ -27,4 +27,6 @@ class Neo4JUtils:
             return json.dumps({'result': 'OFF'})
         return json.dumps({'result': 'ON'})
 
-
+    @staticmethod
+    def run(value):
+        Neo4JUtils.instance._graph.run(value)

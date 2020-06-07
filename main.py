@@ -144,7 +144,123 @@ def save():
         request_json = json.loads(request.json, strict=False)
         if 'token' in request_json:
             token = request_json['token']
+
             print(token)
+
+            # NEO4J Query Nodes
+            query = "MERGE (token:Token {{orth: '{}', is_stop: {}, is_punct: {}, is_space: {}, " \
+                    "meaningful_embedding: {}, is_num: {}, is_alpha: {}}})\n".format(
+                token['linguistic_features']['orth'].replace("'", "\\'"),
+                token['linguistic_features']['is_stop'],
+                token['linguistic_features']['is_punct'],
+                token['linguistic_features']['is_space'],
+                token['linguistic_features']['meaningful_embedding'],
+                token['linguistic_features']['is_num'],
+                token['linguistic_features']['is_alpha'])
+
+            query += "MERGE (embedding:WordEmbedding {{subwords: '{}', subwords_root: '{}', " \
+                    "subwords_length: {}, is_subwords: {}, embedding: '{}'}})\n".format(
+                token['statistical_features']['bert_subwords_original']['subwords'].replace("'", "\\'"),
+                token['statistical_features']['bert_subwords_original']['root'].replace("'", "\\'"),
+                token['statistical_features']['bert_subwords_original']['length'],
+                token['statistical_features']['bert_subwords_original']['is_subwords'],
+                token['statistical_features']['bert_subwords_original']['embedding'].replace("'", "\\'"))
+
+            query += "MERGE (lower:Token {{orth: '{}', is_stop: {}, is_punct: {}, is_space: {}, " \
+                    "meaningful_embedding: {}, is_num: {}, is_alpha: {}}})\n".format(
+                token['linguistic_features']['lower'].replace("'", "\\'"),
+                token['linguistic_features']['is_stop'],
+                token['linguistic_features']['is_punct'],
+                token['linguistic_features']['is_space'],
+                token['linguistic_features']['meaningful_embedding'],
+                token['linguistic_features']['is_num'],
+                token['linguistic_features']['is_alpha'])
+
+            query += "MERGE (lowerEmbedding:WordEmbedding {{subwords: '{}', subwords_root: '{}', " \
+                    "subwords_length: {}, is_subwords: {}, embedding: '{}'}})\n".format(
+                token['statistical_features']['bert_subwords_lower']['subwords'].replace("'", "\\'"),
+                token['statistical_features']['bert_subwords_lower']['root'].replace("'", "\\'"),
+                token['statistical_features']['bert_subwords_lower']['length'],
+                token['statistical_features']['bert_subwords_lower']['is_subwords'],
+                token['statistical_features']['bert_subwords_lower']['embedding'].replace("'", "\\'"))
+
+            query += "MERGE (stem:Token {{orth: '{}'}})\n".format(token['linguistic_features']['stem'].replace("'", "\\'"))
+
+            query += "MERGE (lemma:Token {{orth: '{}'}})\n".format(token['linguistic_features']['lemma'].replace("'", "\\'"))
+
+            query += "MERGE (se:SentenceEmbedding {{value: '{}'}})\n".format(token['statistical_features']['sentence_embedding'].replace("'", "\\'"))
+
+            query += "MERGE (te:TextEmbedding {{value: '{}'}})\n".format(token['statistical_features']['text_embedding'].replace("'", "\\'"))
+
+            query += "MERGE (pos:POS {{value: '{}'}})\n".format(token['linguistic_features']['pos'])
+
+            Neo4JUtils.run(query)
+
+            query = "MATCH (token: Token), " \
+                    "(stem: Token), " \
+                    "(lemma: Token), "\
+                    "(lower: Token), "\
+                    "(se: SentenceEmbedding), "\
+                    "(te: TextEmbedding), "\
+                    "(pos: POS), "\
+                    "(wordEmbedding: WordEmbedding), "\
+                    "(lowerEmbedding: WordEmbedding)\n"\
+                    "WHERE token.orth='{}' AND " \
+                    "stem.orth='{}' AND " \
+                    "lower.orth='{}' AND "\
+                    "lemma.orth='{}' AND " \
+                    "se.value='{}' AND " \
+                    "te.value='{}' AND " \
+                    "pos.value='{}' AND " \
+                    "wordEmbedding.embedding='{}' AND " \
+                    "lowerEmbedding.embedding='{}'\n" \
+                    "MERGE (token)-[:IS_LOWER]->(lower)\n" \
+                    "MERGE (token)-[:IS_STEM]->(stem)\n" \
+                    "MERGE (token)-[:IS_LEMMA]->(lemma)\n" \
+                    "MERGE (token)-[:HAS_SENTENCE_EMBEDDINGS]->(se)\n" \
+                    "MERGE (token)-[:HAS_TEXT_EMBEDDINGS]->(te)\n" \
+                    "MERGE (token)-[:HAS_POS]->(pos)\n" \
+                    "MERGE (token)-[:HAS_WORD_EMBEDDING]->(wordEmbedding)\n" \
+                    "MERGE (token)-[:HAS_WORD_EMBEDDING]->(lowerEmbedding)".format(token['linguistic_features']['orth'].replace("'", "\\'"),
+                                                                            token['linguistic_features']['stem'].replace("'", "\\'"),
+                                                                            token['linguistic_features']['lower'].replace("'", "\\'"),
+                                                                            token['linguistic_features']['lemma'].replace("'", "\\'"),
+                                                                            token['statistical_features']
+                                                                            ['sentence_embedding'].replace("'", "\\'"),
+                                                                            token['statistical_features']
+                                                                            ['text_embedding'].replace("'", "\\'"),
+                                                                            token['linguistic_features']['pos'],
+                                                                            token['statistical_features']
+                                                                            ['bert_subwords_original']['embedding'].replace("'", "\\'"),
+                                                                            token['statistical_features']
+                                                                            ['bert_subwords_lower']['embedding'].replace("'", "\\'"))
+
+            Neo4JUtils.run(query)
+
+            if token['statistical_features']['bert_subwords_original']['ner'] is not None:
+                for ner in token['statistical_features']['bert_subwords_original']['ner']:
+                    if MLUtils.NOENT in ner:
+                        continue
+
+                    query = "MATCH (token:Token) WHERE token.orth='{}'\n" \
+                            "MERGE (ner:NER {{value: '{}'}})\n" \
+                            "MERGE (token)-[:HAS_NER]->(ner)".format(token['linguistic_features']['orth'],
+                                                              ner.replace("'", "\\'"))
+
+                    Neo4JUtils.run(query)
+
+            if token['statistical_features']['bert_subwords_lower']['ner'] is not None:
+                for ner in token['statistical_features']['bert_subwords_lower']['ner']:
+                    if MLUtils.NOENT in ner:
+                        continue
+
+                    query = "MATCH (token:Token) WHERE token.orth='{}'\n" \
+                            "MERGE (lowerner:NER {{value: '{}'}})\n" \
+                            "MERGE (token)-[:HAS_NER]->(ner)".format(token['linguistic_features']['orth'],
+                                                              ner.replace("'", "\\'"))
+
+                    Neo4JUtils.run(query)
+
             return json.dumps({'result': 'acknowledge'})
     return json.dumps({'result': 'error'})
 
