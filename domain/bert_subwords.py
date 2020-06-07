@@ -16,7 +16,7 @@ class BertSubwords:
         return {"subwords": self._subwords, "root": self._root, "length": self._length,
                 "is_subwords": self._is_subwords, "meaningful_embedding": self._meaningful_embedding,
                 "embedding": self.embedding[-10:] if printable_embeddings and self._embedding is not None else None,
-                "ner": self.ner}
+                "ner": list(self.ner) if self.ner is not None else None}
 
     @property
     def subwords(self):

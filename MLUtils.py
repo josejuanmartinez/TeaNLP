@@ -42,15 +42,23 @@ class MLUtils:
                     result[last_tok - 1]:
                 result[last_tok - 1]['text'] += tok
                 result[last_tok - 1]['num'].append(i)
-                if ner_tokens is not None and i in ner_positions:
-                    result[last_tok - 1]['ner'].append(ner_tokens[ner_positions.index(i)]['entity'])
+                """if ner_tokens is not None and i in ner_positions:
+                    result[last_tok - 1]['ner'].add(ner_tokens[ner_positions.index(i)]['entity'])
                 else:
-                    result[last_tok - 1]['ner'].append(MLUtils.NOENT)
+                    result[last_tok - 1]['ner'].add(MLUtils.NOENT)
+                """
             else:
-                result.append({'text': tok, 'num': [i], 'ner': [MLUtils.NOENT]})
+                result.append({'text': tok, 'num': [i]})
+                result[len(result) - 1]['ner'] = set()
+                result[len(result) - 1]['ner'].add(MLUtils.NOENT)
                 if ner_tokens is not None and i in ner_positions:
-                    result[len(result)-1]['ner'] = [ner_tokens[ner_positions.index(i)]['entity']]
+                    result[len(result) - 1]['ner'] = set()
+                    result[len(result) - 1]['ner'].add(ner_tokens[ner_positions.index(i)]['entity'])
+                    print("Adding ner")
+                    print(result[len(result) - 1]['ner'])
                 last_tok += 1
+        print("returning")
+        print(result)
         return result
 
     @staticmethod
@@ -130,12 +138,15 @@ class MLUtils:
         for token in decoded_top_5_tokens:
             if len(token) > 2 and MLUtils.SUBWORD_MARK not in token and token[0].isupper() == original_word.linguistic_features.orth[0].isupper():
                 result.append(token)
-        print("PRED " + str(result))
+        # print("PRED " + str(result))
         return result
-        #for token in top_5_tokens:
-        #    print(masked_sentence.replace(MLUtils.instance.tokenizer.mask_token, MLUtils.instance.tokenizer.decode([token])))
+        # for token in top_5_tokens:
+        #    print(masked_sentence.replace(MLUtils.instance.tokenizer.mask_token,
+        #    MLUtils.instance.tokenizer.decode([token])))
 
     @staticmethod
     def ner(text, grouped_entities=False):
-        nlp = pipeline('ner', model=MLUtils.instance.ner, tokenizer=MLUtils.instance.tokenizer, grouped_entities=grouped_entities)
+        nlp = pipeline('ner', model=MLUtils.instance.ner, tokenizer=MLUtils.instance.tokenizer,
+                       grouped_entities=grouped_entities)
+
         return nlp(text)

@@ -120,3 +120,14 @@ class NLPUtils:
     @staticmethod
     def is_space(word):
         return re.match(r'^[\s\\n\\r\\t ]+$', word) is not None
+
+    @staticmethod
+    def is_email(word):
+        is_email = re.match(r"^[A-Za-z0-9\\.\\+_-]+@[A-Za-z0-9\\._-]+\.[a-zA-Z]*$", word)
+        return is_email is not None
+
+    @staticmethod
+    def is_currency(currency):
+        return currency.lower() in ['$', '€', '£', 'rub', 'usd', 'gbp', 'eur', 'euro', 'euros', 'dollar', 'dollars',
+                                    'ruble', 'rubles', 'yen', 'yens', 'pound', 'pounds', 'krone', 'krones']
+
