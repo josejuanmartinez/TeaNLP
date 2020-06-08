@@ -17,7 +17,7 @@ class MLUtils:
 
     class __MLUtils:
         def __init__(self):
-            # This forces download if not done
+            # This forces download if not done yet
             self.tokenizer = AutoTokenizer.from_pretrained(MLUtils.EMBEDDINGS_NAME)
             self.model = AutoModelWithLMHead.from_pretrained(MLUtils.EMBEDDINGS_NAME)
             self.ner = AutoModelForTokenClassification.from_pretrained(MLUtils.NER_EMBEDDINGS_NAME)
@@ -50,15 +50,10 @@ class MLUtils:
             else:
                 result.append({'text': tok, 'num': [i]})
                 result[len(result) - 1]['ner'] = set()
-                result[len(result) - 1]['ner'].add(MLUtils.NOENT)
-                if ner_tokens is not None and i in ner_positions:
-                    result[len(result) - 1]['ner'] = set()
+                if ner_tokens is not None and i in ner_positions \
+                        and ner_tokens[ner_positions.index(i)]['entity'] != MLUtils.NOENT:
                     result[len(result) - 1]['ner'].add(ner_tokens[ner_positions.index(i)]['entity'])
-                    print("Adding ner")
-                    print(result[len(result) - 1]['ner'])
                 last_tok += 1
-        print("returning")
-        print(result)
         return result
 
     @staticmethod
