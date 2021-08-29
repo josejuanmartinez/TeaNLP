@@ -1,5 +1,7 @@
 # TeaNLP
-Transform, Extract, Analyze
+Transform, Extract, Analyze using NLP graphs
+
+![TeaNLP](https://drive.google.com/uc?id=17u7IaGgRquJEL_DMiro6x0GRNCd7l6Bj)
 
 ## About PoS Tags
 ```
